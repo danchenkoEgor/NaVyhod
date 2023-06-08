@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torchvision.models import resnet34, resnet50, ResNet34_Weights, ResNet50_Weights
+from torchvision.models import resnet34, resnet152, ResNet34_Weights, ResNet152_Weights
 from torchvision.io import read_image
 import torchvision.transforms as transforms
 
@@ -50,44 +50,10 @@ def load_model():
     model_subtype.eval()
 
     # articaType
-    weights = ResNet50_Weights.IMAGENET1K_V1
-    model_type = resnet50(weights=weights)
+    weights = ResNet152_Weights.IMAGENET1K_V1
+    model_type = resnet152(weights=weights)
     model_type.eval()
 
-
-    # # Topwear
-    # model_topwear = resnet34(weights=ResNet34_Weights.IMAGENET1K_V1)
-
-    # for params in model_topwear.parameters():
-    #     params.requires_grad = False
-
-    # masterCategory_head = nn.Sequential(
-    #                                     nn.Linear(512, 4)
-    #                                     )
-
-    # model_topwear.fc = masterCategory_head
-    # model_topwear.fc[0].weight.requires_grad = False
-    # model_topwear.fc[0].bias.requires_grad = False
-
-    # model_topwear.load_state_dict(torch.load('weigths/topwear_weights_1.pt', map_location=torch.device('mps')))
-    # model_topwear.eval()
-
-    # # Bottomwear
-    # model_bottomwear = resnet34(weights=ResNet34_Weights.IMAGENET1K_V1)
-
-    # for params in model_bottomwear.parameters():
-    #     params.requires_grad = False
-
-    # masterCategory_head = nn.Sequential(
-    #                                     nn.Linear(512, 7)
-    #                                     )
-
-    # model_bottomwear.fc = masterCategory_head
-    # model_bottomwear.fc[0].weight.requires_grad = False
-    # model_bottomwear.fc[0].bias.requires_grad = False
-
-    # model_bottomwear.load_state_dict(torch.load('weigths/bottomwear_weights_1.pt', map_location=torch.device('mps')))
-    # model_bottomwear.eval()
 
     # Shoes
     model_shoes = resnet34(weights=ResNet34_Weights.IMAGENET1K_V1)
@@ -106,40 +72,6 @@ def load_model():
     model_shoes.load_state_dict(torch.load('weigths/shoes_weights_1.pt', map_location=torch.device('mps')))
     model_shoes.eval()
 
-    # # Season_shoes
-    # model_season_shoes = resnet34(weights=ResNet34_Weights.IMAGENET1K_V1)
-
-    # for params in model_season_shoes.parameters():
-    #     params.requires_grad = False
-
-    # masterCategory_head = nn.Sequential(
-    #                                     nn.Linear(512, 3)
-    #                                     )
-
-    # model_season_shoes.fc = masterCategory_head
-    # model_season_shoes.fc[0].weight.requires_grad = False
-    # model_season_shoes.fc[0].bias.requires_grad = False
-
-    # model_season_shoes.load_state_dict(torch.load('weigths/season_footwear_weights_1_5.pt', map_location=torch.device('mps')))
-    # model_season_shoes.eval()
-
-    # # Season_wear
-    # model_season_wear = resnet34(weights=ResNet34_Weights.IMAGENET1K_V1)
-
-    # for params in model_season_wear.parameters():
-    #     params.requires_grad = False
-
-    # masterCategory_head = nn.Sequential(
-    #                                     nn.Linear(512, 3)
-    #                                     )
-
-    # model_season_wear.fc = masterCategory_head
-    # model_season_wear.fc[0].weight.requires_grad = False
-    # model_season_wear.fc[0].bias.requires_grad = False
-
-    # model_season_wear.load_state_dict(torch.load('weigths/season_apparel_weights_1_5.pt', map_location=torch.device('mps')))
-    # model_season_wear.eval()
-
     return model_master, model_subtype, model_type, model_shoes
 
 
@@ -150,7 +82,7 @@ def prediction(model1, model2, model3, model4, path_for_pic) -> dict:
     bottomwear = ['Jeans', 'Shorts', 'Trousers', 'Track Pants', 'Leggings', 'Capris', 'Skirts']
     shoes = ['Casual Shoes', 'Sports Shoes', 'Heels', 'Formal Shoes']
     seasons = ['offseason', 'summer', 'winter']
-    weights = ResNet50_Weights.IMAGENET1K_V1
+    weights = ResNet152_Weights.IMAGENET1K_V1
 
     pic_for_pred = read_image(path_for_pic) / 255
     pred = model1(pic_for_pred.unsqueeze(0)).argmax().item()
@@ -237,41 +169,92 @@ def find_analogous_colors(rgb):
                         ((r + 30) % 256, g, b)]
     return analogous_colors
 
-def find_matching_clothes(folder, cat, user_id, color_func = find_hexagon_colors):
+def find_matching_clothes(folder, user_id, user_input, color_func=find_hexagon_colors):
+
     names = os.listdir(folder)
-    my_dict = {}
-    for name in names:
-        if name.endswith('.json'):
-            file_paths = [(name.split('.')[0]+'.jpg') for name in names]
-            sub_dict = joblib.load(f'jsons/user_{user_id}/{name}')
-            my_dict[f'{name.split(".")[0]}.jpg'] = sub_dict
+    names.remove('alltypes.json')
+    cloth_dict = {}
+    for item in names:
+        cloth_dict[item.split('.')[0] + '.jpg'] = joblib.load(f'{folder}{item}')
+        photo_files = list(cloth_dict.keys())
 
-    # file_paths = [os.path.join(folder, name) for name in names if name.endswith('.jpeg') or name.endswith('.jpg')] # получаем пути к файлам
-    main_rgb_color = [find_dominant_color(f'photos/user_{user_id}/{path}') for path in file_paths] # получаем основной цвет для каждого файла
-    items_colors = dict(zip(file_paths, main_rgb_color)) # создаем словарь {"путь к файлу": цвет}
-    matching_colors = {color: color_func(color) for color in list(items_colors.values())} # {(осн. цвет): [список кортежей с компл-ми цветами]} - можно использовать find_triadic_colors / find_analogous_colors
+
+    main_cloths = {}
+    second_cloths = {}
+    for key in photo_files:
+        if user_input in cloth_dict[key].values():
+            if 'subCat' in cloth_dict[key].keys():
+                main_cloths[key] = cloth_dict[key]['subCat']
+            else:
+                main_cloths[key] = cloth_dict[key]['masterCategory']
+
+    for key in photo_files:
+        if list(main_cloths.values())[0] not in cloth_dict[key].values():
+            if 'subCat' in cloth_dict[key].keys():
+                second_cloths[key] = cloth_dict[key]['subCat']
+            else:
+                second_cloths[key] = cloth_dict[key]['masterCategory']
+
+
+    unique_second = list(set(second_cloths.values()))
+
+    cat_second_cloths = []
+    for item in unique_second:
+        a = []
+        for key in second_cloths:
+            if item == second_cloths[key]:
+                a.append(key)
+        cat_second_cloths.append(a)
+
+    cat_second_cloths = dict(zip(unique_second, cat_second_cloths))
+
+
+    main_rgb_color = [find_dominant_color(f'photos/user_{user_id}/{path}') for path in photo_files]
+    items_colors = dict(zip(photo_files, main_rgb_color))
+
+    main_cloths_color = {key: items_colors[key] for key in main_cloths.keys()}
+
+    matching_colors = {color: color_func(color) for color in list(main_cloths_color.values())} # {(осн. цвет): [список кортежей с компл-ми цветами]} - можно использовать find_triadic_colors / find_analogous_colors
     matching_colors_list = list(itertools.chain.from_iterable(matching_colors.values())) # все значения из matching_colors переводим в список для дальнейшей итерации по ним
-    distances = {color: {filename: distance.cosine(color, rgb) for filename, rgb in items_colors.items()} for color in matching_colors_list} # вычисляем близость компл-х цветов и всех имеющихся предметов одежды
-    nearest_dict = {key: dict(sorted(values.items(), key=lambda x: x[1])[:2]) for key, values in distances.items()} # выбираем наиболее близкую по цвету вещь (кол-во можем менять)
-    result_dict = {}
-    for key1, value1 in items_colors.items(): # создаем словарь {"файл с предметом одежды": [список ссылок на подходящие по цвету вещи]}
-        inner_list = []
-        inner_value = matching_colors.get(value1)
-        if inner_value:
-            for inner_item in inner_value:
-                inner_dict = nearest_dict.get(inner_item, {})
-                inner_list.extend(list(inner_dict.keys()))
-        result_dict[key1] = list(set(inner_list))
 
-    # for key, value in result_dict.items(): # эту часть нужно доработать, чтобы вещь не рекомендовалась сама себе. Пока просто удаляем ссылку на вещь из значения, если она совпадает с ключом
-    #     if key in value:
-    #         value.remove(key)
 
-    for key in file_paths:
-        try:
-            if my_dict[key]['subCat'] != cat:
-                del result_dict[key]
-        except:
-            continue
-    
-    return result_dict
+    result_nearest = []
+    for key in cat_second_cloths:
+        second_cloths_color = {key: items_colors[key] for key in cat_second_cloths[key]}
+
+        distances = {color: {filename: distance.cosine(color, rgb) for filename, rgb in second_cloths_color.items()} for color in matching_colors_list} # вычисляем близость компл-х цветов и всех имеющихся предметов одежды
+        nearest_dict = {key: dict(sorted(values.items(), key=lambda x: x[1])[:1]) for key, values in distances.items()} # выбираем наиболее близкую по цвету вещь (кол-во можем менять)
+        result_nearest.append(nearest_dict)
+
+
+    result_cat_dict = dict(zip(unique_second, result_nearest))
+   
+    num_clothes = len(main_cloths)
+    x = 0 # стартовые точки с разницей в window
+    y = int(len(nearest_dict) / len(main_cloths))
+    window = y
+    nearest_dict_spliced = []
+    for i in range(num_clothes):
+        for key in result_cat_dict:
+            m = result_cat_dict[key]
+            l = list({k: m[k] for k in list(m)[x:y]}.values())
+            keys_list = []
+            values_list = []
+            for j in l:
+                keys_list.append((j.keys()))
+                values_list.append(list(j.values()))
+            t = values_list.index(min(values_list))
+            nearest_dict_spliced.append(list(keys_list[t])[0])
+        x += window
+        y += window
+
+    result = {}
+    w = 0
+    z = len(unique_second)
+    window = z
+    for item in main_cloths:
+        result[item] = nearest_dict_spliced[w:z]
+        w += window
+        z += window
+
+    return result
