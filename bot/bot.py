@@ -23,7 +23,7 @@ warnings.filterwarnings("ignore")
 
 from funcs import load_model, prediction, find_matching_clothes, find_hexagon_colors, find_analogous_colors, find_triadic_colors
 
-TOKEN = ''
+TOKEN = 'YOUR_TOKEN'
 
 bot = Bot(token = TOKEN)
 dp = Dispatcher(bot=bot)
@@ -37,7 +37,15 @@ model1, model2, model3, model4 = load_model()
 # Бот начинает работать
 @dp.message_handler(commands=['start'])
 async def start_answer(message: types.Message):
-    await message.answer('Привет!')
+    await message.answer("""Привет, друг или подруга!\n
+Наш бот подберет тебе образ так, чтобы сочетание цветов одежды было наиболее гармоничным.\n
+Все о командах ты сможешь узнать, написав в чат /help.\n
+Чтобы начать работать, просто загрузи фотографии (по одной или несколько), а затем напиши команду /outfits.""")
+
+@dp.message_handler(commands=['help'])
+async def help_answer(message: types.Message):
+    await message.answer("""/outfits - подберет одежду по заданным тобой критериям.\n
+/delete - очистит твой гардероб.""")
 
 class AlbumMiddleware(BaseMiddleware):
     """This middleware is for capturing media groups."""
@@ -144,62 +152,63 @@ async def get_message(message: types.Message, album: list[types.Message] = None)
 
 
 
-@dp.message_handler(commands=['outfits_topwear'])
-async def outfit_recomendation(messege: types.Message):
-    user_id = messege.from_user.id
+@dp.message_handler(commands=['outfits'])
+async def type_choose(message: types.Message):
+    user_id = message.from_user.id
     try:
-        dict = find_matching_clothes(f'jsons/user_{user_id}', cat='topwear', user_id=user_id, color_func=find_triadic_colors)
-        print(dict)
-        keys = list(dict)
-        media = types.MediaGroup()
-        photos = dict[keys[0]]
-        for item in photos:
-            media.attach_photo(types.InputFile(f'photos/user_{user_id}/{item}'))
-
-        await messege.answer_media_group(media=media)
-        await messege.answer('Твой первый лук!')
-
-        media = types.MediaGroup()
-        photos = dict[keys[1]]
-        for item in photos:
-            media.attach_photo(types.InputFile(f'photos/user_{user_id}/{item}'))
-
-        await messege.answer_media_group(media=media)
-        await messege.answer('Твой второй лук!')
-
+        global buttons
+        buttons = list(joblib.load(f'jsons/user_{user_id}/alltypes.json'))
+        builder = ReplyKeyboardMarkup(one_time_keyboard=True)
+        for i in buttons:
+            builder.add(KeyboardButton(i))
+        await message.answer("Одежда для которой ты хотел(а) бы собрать образ!", reply_markup=builder)
     except:
-        await messege.answer('Загрузите фотографии верхней одежды')
+         await message.answer("Твой гардероб пуст!")
+    
 
-@dp.message_handler(commands=['outfits_bottomwear'])
-async def outfit_recomendation(messege: types.Message):
-    user_id = messege.from_user.id
+@dp.message_handler(lambda x: x.text in buttons)
+async def answer(message: types.Message):
+    global user_input
+    user_input = message.text
+    builder2 = ReplyKeyboardMarkup(one_time_keyboard=True)
+    global pallete
+    pallete = ['Similar', 'Close', 'Contrast']
+    for i in pallete:
+        builder2.add(KeyboardButton(i))
+    await message.answer('Выбери правило сочетания цветов!', reply_markup=builder2)
+
+@dp.message_handler(lambda c: c.text in pallete)
+async def outfit_recomendation(message: types.Message):
+    user_id = message.from_user.id
+    if message.text == 'Similar':
+        func = find_hexagon_colors
+    elif message.text == 'Close':
+        func = find_analogous_colors
+    else:
+        func = find_triadic_colors
+    
     try:
-        dict = find_matching_clothes(f'jsons/user_{user_id}', cat='bottomwear', user_id=user_id, color_func=find_triadic_colors)
-        print(dict)
-        keys = list(dict)
-        media = types.MediaGroup()
-        photos = dict[keys[0]]
-        for item in photos:
-            media.attach_photo(types.InputFile(f'photos/user_{user_id}/{item}'))
-
-        await messege.answer_media_group(media=media)
-        await messege.answer('Твой первый лук!')
-
-        media = types.MediaGroup()
-        photos = dict[keys[1]]
-        for item in photos:
-            media.attach_photo(types.InputFile(f'photos/user_{user_id}/{item}'))
-
-        await messege.answer_media_group(media=media)
-        await messege.answer('Твой второй лук!')
-
+        dict = find_matching_clothes(folder=f'jsons/user_{user_id}/',
+                                        user_id=user_id,
+                                        user_input=user_input,
+                                        color_func=func)
+        
+        for index, key in enumerate(dict):
+            media = types.MediaGroup()
+            photos = dict[key]
+            media.attach_photo(types.InputFile(f'photos/user_{user_id}/{key}'))
+            for item in photos:
+                media.attach_photo(types.InputFile(f'photos/user_{user_id}/{item}'))
+        
+            await message.answer_media_group(media=media)
+            await message.answer(f'Образ {index + 1}!')
     except:
-        await messege.answer('Загрузите фотографии нижней одежды')
+        await message.answer(f'Ну извините, ошибка!')
 
 @dp.message_handler(commands='delete')
-async def delete_photos(messege: types.Message):
+async def delete_photos(message: types.Message):
 
-    user_id = messege.from_user.id
+    user_id = message.from_user.id
     photo_files = os.listdir(f'photos/user_{user_id}')
     json_files = os.listdir(f'jsons/user_{user_id}')
 
@@ -210,7 +219,7 @@ async def delete_photos(messege: types.Message):
         for file in json_files:
             os.remove(f'jsons/user_{user_id}/{file}')
 
-    await messege.answer('Фотографии удалены')
+    await message.answer('Все фотографии удалены!')
 
 
 if __name__ == '__main__':
