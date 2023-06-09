@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torchvision.models import resnet34, resnet152, ResNet34_Weights, ResNet152_Weights
+from torchvision.models import resnet34, resnet101, ResNet34_Weights, ResNet101_Weights
 from torchvision.io import read_image
 import torchvision.transforms as transforms
 
@@ -50,8 +50,23 @@ def load_model():
     model_subtype.eval()
 
     # articaType
-    weights = ResNet152_Weights.IMAGENET1K_V1
-    model_type = resnet152(weights=weights)
+    # weights = ResNet101_Weights.IMAGENET1K_V1
+    # model_type = resnet101(weights=weights)
+    # model_type.eval()
+
+    model_type = resnet101(weights=ResNet101_Weights.IMAGENET1K_V1)
+
+    for params in model_type.parameters():
+        params.requires_grad = False    
+
+    masterCategory_head = nn.Sequential(
+                                        nn.Linear(2048, 11)
+                                        )
+    model_type.fc = masterCategory_head
+    model_type.fc[0].weight.requires_grad = False
+    model_type.fc[0].bias.requires_grad = False
+
+    model_type.load_state_dict(torch.load('weigths/resnet_128_1.pt', map_location=torch.device('mps')))
     model_type.eval()
 
 
@@ -78,11 +93,10 @@ def load_model():
 def prediction(model1, model2, model3, model4, path_for_pic) -> dict:
 
     result_cloth = {}
-    topwear = ['Tshirts', 'Shirts', 'Tops', 'Sweaters']
-    bottomwear = ['Jeans', 'Shorts', 'Trousers', 'Track Pants', 'Leggings', 'Capris', 'Skirts']
+    apparel = ['Tshirts', 'Jeans', 'Suit', 'Shirts', 'Shorts', 'Dresses', 'Pants', 'Sweatshirts', 'Sweaters', 'Tops', 'Jackets']
     shoes = ['Casual Shoes', 'Sports Shoes', 'Heels', 'Formal Shoes']
     seasons = ['offseason', 'summer', 'winter']
-    weights = ResNet152_Weights.IMAGENET1K_V1
+    weights = ResNet101_Weights.IMAGENET1K_V1
 
     pic_for_pred = read_image(path_for_pic) / 255
     pred = model1(pic_for_pred.unsqueeze(0)).argmax().item()
@@ -105,12 +119,15 @@ def prediction(model1, model2, model3, model4, path_for_pic) -> dict:
             else:
                 result_cloth.setdefault('subCat', 'bottomwear')
 
-            with torch.no_grad():
-                prediction = model3(pic_for_pred.unsqueeze(0))
-            # Get the  predicted class label
-            class_id = prediction.argmax().item()
-            category_name = weights.meta["categories"][class_id]
-            result_cloth.setdefault('articalType', category_name)
+            # with torch.no_grad():
+            #     prediction = model3(pic_for_pred.unsqueeze(0))
+            # # Get the  predicted class label
+            # class_id = prediction.argmax().item()
+            # category_name = weights.meta["categories"][class_id]
+            # result_cloth.setdefault('articalType', category_name)
+
+            prediction = model3(pic_for_pred.unsqueeze(0)).argmax()
+            result_cloth.setdefault('articalType', apparel[prediction])
 
         elif result_cloth['masterCategory'] == 'shoes':
             pred_shoes = model4(pic_for_pred.unsqueeze(0)).argmax().item()

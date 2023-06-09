@@ -16,7 +16,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import StatesGroup, State
 from aiogram.dispatcher.handler import CancelHandler
 from aiogram.dispatcher.middlewares import BaseMiddleware
-from aiogram.types import ReplyKeyboardRemove, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardRemove, ReplyKeyboardMarkup, KeyboardButton, InputFile
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -40,12 +40,30 @@ async def start_answer(message: types.Message):
     await message.answer("""Привет, друг или подруга!\n
 Наш бот подберет тебе образ так, чтобы сочетание цветов одежды было наиболее гармоничным.\n
 Все о командах ты сможешь узнать, написав в чат /help.\n
-Чтобы начать работать, просто загрузи фотографии (по одной или несколько), а затем напиши команду /outfits.""")
+Чтобы начать работать, просто загрузи фотографии (по одной или несколько) на светлом однотонном фоне в расправленном виде или фотографию с сайта на котором вы любите делать контрольную закупку, а затем напиши команду /outfits.""")
 
 @dp.message_handler(commands=['help'])
 async def help_answer(message: types.Message):
     await message.answer("""/outfits - подберет одежду по заданным тобой критериям.\n
-/delete - очистит твой гардероб.""")
+/delete - очистит твой гардероб.\n
+Ниже представлены цветовые диаграммы доступных цветовых сочетаний.""")
+                         
+    image_from_pc1 = InputFile("help/close.jpeg")
+    await message.answer_photo(
+        image_from_pc1,
+        caption="Close colors"
+    )
+    image_from_pc2 = InputFile("help/similar.jpeg")
+    await message.answer_photo(
+        image_from_pc2,
+        caption="Similar colors"
+    )
+    image_from_pc3 = InputFile("help/contrast.jpeg")
+    await message.answer_photo(
+        image_from_pc3,
+        caption="Contrast colors"
+    )
+
 
 class AlbumMiddleware(BaseMiddleware):
     """This middleware is for capturing media groups."""
